@@ -35,7 +35,7 @@ export async function generateImage(prompt: string): Promise<string | null> {
           height: 768,
           batchSize: 1,
           loras: {
-            '1967432076913663882': 0.7,
+            '1967443416228518985': 0.7,
           },
         },
       }),

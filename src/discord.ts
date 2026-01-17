@@ -30,11 +30,14 @@ client.on('messageCreate', async (message: Message) => {
   let replied = false;
 
   try {
+    console.log('Step 1: Searching memories...');
     const memories = await searchMemories(message.content);
+    console.log('Step 2: Generating response...');
     const { content, imagePrompt } = await generateResponse(message.content, memories);
-
+    console.log('Step 3: Sending reply...');
     await message.reply(content);
     replied = true;
+    console.log('Step 4: Reply sent successfully');
 
     // Image generation runs separately - errors won't affect the main response
     try {
