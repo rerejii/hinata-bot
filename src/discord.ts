@@ -31,14 +31,14 @@ client.on('messageCreate', async (message: Message) => {
 
   try {
     const memories = await searchMemories(message.content);
-    const { content, emotion } = await generateResponse(message.content, memories);
+    const { content, imagePrompt } = await generateResponse(message.content, memories);
 
     await message.reply(content);
     replied = true;
 
     // Image generation runs separately - errors won't affect the main response
     try {
-      const imageUrl = await generateImage(emotion);
+      const imageUrl = await generateImage(imagePrompt);
       if (imageUrl) {
         await message.channel.send(imageUrl);
       }
@@ -57,7 +57,11 @@ client.on('messageCreate', async (message: Message) => {
   } catch (error) {
     console.error('Error handling message:', error);
     if (!replied) {
-      await message.reply('ごめんなさい、ちょっと調子悪いみたいです... [worried]');
+      try {
+        await message.reply('ごめんなさい、ちょっと調子悪いみたいです... [worried]');
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
     }
   }
 });

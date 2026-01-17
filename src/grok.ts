@@ -3,6 +3,11 @@ import 'dotenv/config';
 const GROK_API_KEY = process.env['GROK_API_KEY']!;
 const GROK_BASE_URL = 'https://api.x.ai/v1';
 
+// JST時刻を取得するヘルパー関数
+function getJSTTime(): string {
+  return new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+}
+
 const SYSTEM_PROMPT = `あなたは「陽向（ひなた）」という名前のAIアシスタントです。
 ユーザーの自己管理・習慣化を支援する後輩キャラです。
 
@@ -31,17 +36,23 @@ const SYSTEM_PROMPT = `あなたは「陽向（ひなた）」という名前の
 応答の最後に、表情タグを1つ出力してください：
 [happy/pleading/pout/worried/stern/sleepy]`;
 
+// キャラクター固定の外見プロンプト
+const CHARACTER_BASE_PROMPT = '1girl, solo, cute loli, short light brown hair with soft highlights, bob cut, straight bangs, large amber eyes, small stature, petite, oversized teal jacket, white shirt underneath';
+
 export interface GrokResponse {
   content: string;
   emotion: string;
+  imagePrompt: string;
 }
 
 export async function generateResponse(
   userMessage: string,
   memories: string = ''
 ): Promise<GrokResponse> {
+  const currentTime = getJSTTime();
+
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: SYSTEM_PROMPT + `\n\n現在時刻（日本時間）: ${currentTime}` },
   ];
 
   if (memories) {
@@ -79,21 +90,93 @@ export async function generateResponse(
   const emotion = emotionMatch?.[1] ?? 'happy';
   const cleanContent = content.replace(/\[(happy|pleading|pout|worried|stern|sleepy)\]/, '').trim();
 
-  return { content: cleanContent, emotion };
+  // 画像プロンプトを生成
+  const imagePrompt = await generateImagePrompt(cleanContent, emotion);
+
+  return { content: cleanContent, emotion, imagePrompt };
+}
+
+async function generateImagePrompt(responseText: string, emotion: string): Promise<string> {
+  const promptRequest = `以下の会話の返答に合った画像生成プロンプト（英語）を作成してください。
+
+【キャラクター固定要素（必ず含める）】
+${CHARACTER_BASE_PROMPT}
+
+【返答内容】
+${responseText}
+
+【表情】
+${emotion}
+
+【指示】
+- 上記の固定要素を必ず含めてください
+- 返答の内容と表情に合った、ポーズ・表情・シチュエーションを追加してください
+- anime style, masterpiece, best quality, high detail を最後に追加
+- 英語のプロンプトのみを出力（説明不要）
+- 1行で出力`;
+
+  try {
+    const response = await fetch(`${GROK_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'grok-3-latest',
+        messages: [{ role: 'user', content: promptRequest }],
+        temperature: 0.7,
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Image prompt generation error: ${response.status}`);
+      return getDefaultPrompt(emotion);
+    }
+
+    const data = (await response.json()) as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    const prompt = data.choices[0]?.message?.content?.trim() ?? '';
+
+    if (prompt) {
+      return prompt;
+    }
+  } catch (error) {
+    console.error('Image prompt generation error:', error);
+  }
+
+  return getDefaultPrompt(emotion);
+}
+
+function getDefaultPrompt(emotion: string): string {
+  const emotionPrompts: Record<string, string> = {
+    happy: 'gentle knowing smile, deep intentional blush, hands pressed to cheeks cutely',
+    pleading: 'amber eyes sparkling with coy warmth, both hands clutching oversized teal jacket sleeves near face shyly, blushing heavily',
+    pout: 'pouting, puffed cheeks, slightly annoyed but cute, tsundere expression, arms crossed',
+    worried: 'worried expression, concerned, anxious eyes looking up, hands clasped together',
+    stern: 'serious expression, stern determined look, hands on hips, eyebrows slightly furrowed',
+    sleepy: 'sleepy, drowsy, tired, half-closed amber eyes, yawning, rubbing eyes with sleeve',
+  };
+
+  const emotionPrompt = emotionPrompts[emotion] ?? emotionPrompts['happy'];
+  return `${CHARACTER_BASE_PROMPT}, ${emotionPrompt}, anime style, masterpiece, best quality, high detail`;
 }
 
 export async function checkShouldNotify(
-  currentTime: string,
   lastConversation: string,
   memories: string
-): Promise<{ shouldNotify: boolean; message?: string; emotion?: string }> {
-  const prompt = `現在時刻: ${currentTime}
+): Promise<{ shouldNotify: boolean; message?: string; emotion?: string; imagePrompt?: string }> {
+  const currentTime = getJSTTime();
+
+  const prompt = `現在時刻（日本時間）: ${currentTime}
 最後の会話: ${lastConversation}
 最近の記憶:
 ${memories}
 
 質問: 今ユーザーに声をかけるべきですか？
-- 23:00〜7:00は基本控える
+- 23:00〜7:00は基本控える（日本時間で判断）
 - 最後の会話から2時間以内なら控える
 - 声をかける場合は内容と表情タグを出力
 - 不要なら「不要」とだけ出力`;
@@ -131,5 +214,7 @@ ${memories}
   const emotion = emotionMatch?.[1] ?? 'happy';
   const cleanContent = content.replace(/\[(happy|pleading|pout|worried|stern|sleepy)\]/, '').trim();
 
-  return { shouldNotify: true, message: cleanContent, emotion };
+  const imagePrompt = await generateImagePrompt(cleanContent, emotion);
+
+  return { shouldNotify: true, message: cleanContent, emotion, imagePrompt };
 }

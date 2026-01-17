@@ -9,19 +9,17 @@ export function startCronJobs(): void {
     console.log('Running hourly check...');
 
     try {
-      const now = new Date();
-      const currentTime = now.toLocaleString('ja-JP');
       const lastConversation = getLastConversationTime();
       const memories = await getRecentMemories();
 
-      const result = await checkShouldNotify(currentTime, lastConversation, memories);
+      const result = await checkShouldNotify(lastConversation, memories);
 
       if (result.shouldNotify && result.message) {
         console.log('Sending scheduled notification...');
 
         let imageUrl: string | null = null;
-        if (result.emotion) {
-          imageUrl = await generateImage(result.emotion);
+        if (result.imagePrompt) {
+          imageUrl = await generateImage(result.imagePrompt);
         }
 
         await sendDMToUser(result.message, imageUrl ?? undefined);

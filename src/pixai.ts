@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 const PIXAI_API_KEY = process.env['PIXAI_API_KEY']!;
 const PIXAI_BASE_URL = 'https://api.pixai.art/v1';
-const MODEL_ID = '1935090614966005945';
+const MODEL_ID = '1935090615918113018';
 
 interface TaskResponse {
   id: string;
@@ -12,26 +12,13 @@ interface TaskResponse {
   };
 }
 
-const EMOTION_PROMPTS: Record<string, string> = {
-  happy: 'gentle knowing smile showing slight teeth, deep intentional blush, hands pressed to cheeks cutely',
-  pleading: 'amber eyes sparkling with coy warmth, both hands clutching oversized teal jacket sleeves near face shyly yet playfully, blushing heavily',
-  pout: 'pouting, puffed cheeks, slightly annoyed but cute, tsundere expression, arms crossed',
-  worried: 'worried expression, concerned, anxious eyes looking up, hands clasped together',
-  stern: 'serious expression, stern determined look, hands on hips, eyebrows slightly furrowed',
-  sleepy: 'sleepy, drowsy, tired, half-closed amber eyes, yawning, rubbing eyes with sleeve',
-};
-
-const BASE_PROMPT =
-  '1girl, solo, cute loli, short light brown hair with soft highlights, bob cut, straight bangs, large amber eyes gazing up warmly with coy glint, small stature, petite, oversized teal jacket often slipping off shoulders or sleeves pulled over hands, white shirt underneath, casual style, warm soft lighting, colorful pastel bokeh background, anime style, masterpiece, best quality, high detail';
-
 const NEGATIVE_PROMPT =
   'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry';
 
-export async function generateImage(emotion: string): Promise<string | null> {
-  const emotionPrompt = EMOTION_PROMPTS[emotion] ?? EMOTION_PROMPTS['happy'];
-  const prompt = `${BASE_PROMPT}, ${emotionPrompt}`;
-
+export async function generateImage(prompt: string): Promise<string | null> {
   try {
+    console.log(`PixAI: Using prompt: ${prompt.substring(0, 100)}...`);
+
     // Step 1: Create generation task
     const createResponse = await fetch(`${PIXAI_BASE_URL}/task`, {
       method: 'POST',
