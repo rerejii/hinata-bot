@@ -27,22 +27,38 @@ client.on('messageCreate', async (message: Message) => {
 
   console.log(`DM received from ${message.author.tag}: ${message.content}`);
 
+  let replied = false;
+
   try {
     const memories = await searchMemories(message.content);
     const { content, emotion } = await generateResponse(message.content, memories);
 
     await message.reply(content);
+    replied = true;
 
-    const imageUrl = await generateImage(emotion);
-    if (imageUrl) {
-      await message.channel.send(imageUrl);
+    // Image generation runs separately - errors won't affect the main response
+    try {
+      const imageUrl = await generateImage(emotion);
+      if (imageUrl) {
+        await message.channel.send(imageUrl);
+      }
+    } catch (imageError) {
+      console.error('Image generation error:', imageError);
     }
 
-    await saveMemory(`ユーザー: ${message.content}\nひなた: ${content}`);
+    // Memory saving runs separately - errors won't affect the user
+    try {
+      await saveMemory(`ユーザー: ${message.content}\nひなた: ${content}`);
+    } catch (memoryError) {
+      console.error('Memory save error:', memoryError);
+    }
+
     updateLastConversationTime();
   } catch (error) {
     console.error('Error handling message:', error);
-    await message.reply('ごめんなさい、ちょっと調子悪いみたいです... [worried]');
+    if (!replied) {
+      await message.reply('ごめんなさい、ちょっと調子悪いみたいです... [worried]');
+    }
   }
 });
 
