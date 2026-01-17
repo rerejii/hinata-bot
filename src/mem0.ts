@@ -10,14 +10,6 @@ interface Memory {
   created_at: string;
 }
 
-interface SearchResult {
-  results: Array<{
-    id: string;
-    memory: string;
-    score: number;
-  }>;
-}
-
 interface AddMemoryResponse {
   results: Array<{
     id: string;
@@ -27,26 +19,39 @@ interface AddMemoryResponse {
 }
 
 export async function searchMemories(query: string, limit: number = 5): Promise<string> {
-  const response = await fetch(`${MEM0_BASE_URL}/memories/search/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Token ${MEM0_API_KEY}`,
-    },
-    body: JSON.stringify({
-      query,
-      user_id: USER_ID,
-      limit,
-    }),
-  });
+  try {
+    const response = await fetch(`${MEM0_BASE_URL}/memories/search/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Token ${MEM0_API_KEY}`,
+      },
+      body: JSON.stringify({
+        query,
+        user_id: USER_ID,
+        limit,
+      }),
+    });
 
-  if (!response.ok) {
-    console.error(`Mem0 search error: ${response.status}`);
+    if (!response.ok) {
+      console.error(`Mem0 search error: ${response.status}`);
+      return '';
+    }
+
+    const data = await response.json();
+
+    // Handle both array response and object with results property
+    if (Array.isArray(data)) {
+      return data.map((m: { memory: string }) => m.memory).join('\n');
+    }
+    if (data.results && Array.isArray(data.results)) {
+      return data.results.map((m: { memory: string }) => m.memory).join('\n');
+    }
+    return '';
+  } catch (error) {
+    console.error('Mem0 search error:', error);
     return '';
   }
-
-  const data = (await response.json()) as SearchResult;
-  return data.results.map((m) => m.memory).join('\n');
 }
 
 export async function getRecentMemories(limit: number = 10): Promise<string> {
