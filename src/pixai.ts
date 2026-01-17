@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 const PIXAI_API_KEY = process.env['PIXAI_API_KEY']!;
 const PIXAI_BASE_URL = 'https://api.pixai.art/v1';
-const MODEL_ID = '1935090615918113018';
+const MODEL_ID = '1935090614966005945';
 
 interface TaskResponse {
   id: string;
