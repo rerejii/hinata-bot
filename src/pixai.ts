@@ -1,22 +1,15 @@
 import 'dotenv/config';
 
 const PIXAI_API_KEY = process.env['PIXAI_API_KEY']!;
-const PIXAI_BASE_URL = 'https://api.pixai.art';
+const PIXAI_BASE_URL = 'https://api.pixai.art/v1';
+const MODEL_ID = '1935090615918113018';
 
-interface MediaResult {
-  id: string;
-  urls: {
-    variant?: string;
-    small?: string;
-    medium?: string;
-    original?: string;
-  };
-}
-
-interface GenerationTask {
+interface TaskResponse {
   id: string;
   status: string;
-  outputs?: MediaResult[];
+  outputs?: {
+    mediaUrls?: string[];
+  };
 }
 
 const EMOTION_PROMPTS: Record<string, string> = {
@@ -39,96 +32,75 @@ export async function generateImage(emotion: string): Promise<string | null> {
   const prompt = `${BASE_PROMPT}, ${emotionPrompt}`;
 
   try {
-    const createResponse = await fetch(`${PIXAI_BASE_URL}/graphql`, {
+    // Step 1: Create generation task
+    const createResponse = await fetch(`${PIXAI_BASE_URL}/task`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${PIXAI_API_KEY}`,
       },
       body: JSON.stringify({
-        query: `
-          mutation createGenerationTask($parameters: JSONObject!) {
-            createGenerationTask(parameters: $parameters) {
-              id
-              status
-            }
-          }
-        `,
-        variables: {
-          parameters: {
-            prompts: prompt,
-            negativePrompts: NEGATIVE_PROMPT,
-            modelId: '1648918127446573124',
-            width: 512,
-            height: 768,
-            steps: 25,
+        parameters: {
+          prompts: prompt,
+          negativePrompts: NEGATIVE_PROMPT,
+          modelId: MODEL_ID,
+          width: 512,
+          height: 768,
+          batchSize: 1,
+          loras: {
+            '1967432076913663882': 0.7,
           },
         },
       }),
     });
 
     if (!createResponse.ok) {
-      console.error(`PixAI create error: ${createResponse.status}`);
+      const errorText = await createResponse.text();
+      console.error(`PixAI create error: ${createResponse.status} - ${errorText}`);
       return null;
     }
 
-    const createData = (await createResponse.json()) as {
-      data?: { createGenerationTask?: { id: string } };
-    };
-    const taskId = createData.data?.createGenerationTask?.id;
+    const createData = (await createResponse.json()) as TaskResponse;
+    const taskId = createData.id;
 
     if (!taskId) {
       console.error('PixAI: No task ID returned');
       return null;
     }
 
-    for (let i = 0; i < 60; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    console.log(`PixAI: Task created with ID: ${taskId}`);
 
-      const statusResponse = await fetch(`${PIXAI_BASE_URL}/graphql`, {
-        method: 'POST',
+    // Step 2: Poll for task completion
+    for (let i = 0; i < 30; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const statusResponse = await fetch(`${PIXAI_BASE_URL}/task/${taskId}`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${PIXAI_API_KEY}`,
         },
-        body: JSON.stringify({
-          query: `
-            query getGenerationTask($id: ID!) {
-              generationTask(id: $id) {
-                id
-                status
-                outputs {
-                  id
-                  urls {
-                    variant
-                    small
-                    medium
-                    original
-                  }
-                }
-              }
-            }
-          `,
-          variables: { id: taskId },
-        }),
       });
 
       if (!statusResponse.ok) {
+        console.error(`PixAI status check error: ${statusResponse.status}`);
         continue;
       }
 
-      const statusData = (await statusResponse.json()) as {
-        data?: { generationTask?: GenerationTask };
-      };
-      const task = statusData.data?.generationTask;
+      const task = (await statusResponse.json()) as TaskResponse;
+      console.log(`PixAI: Task status: ${task.status}`);
 
-      if (task?.status === 'completed' && task.outputs && task.outputs.length > 0) {
-        const output = task.outputs[0];
-        return output?.urls?.medium ?? output?.urls?.small ?? output?.urls?.original ?? null;
+      if (task.status === 'completed') {
+        const mediaUrls = task.outputs?.mediaUrls ?? [];
+        if (mediaUrls.length > 0) {
+          console.log(`PixAI: Image generated: ${mediaUrls[0]}`);
+          return mediaUrls[0] ?? null;
+        }
+        console.error('PixAI: No media URLs in completed task');
+        return null;
       }
 
-      if (task?.status === 'failed') {
-        console.error('PixAI generation failed');
+      if (task.status === 'failed' || task.status === 'cancelled') {
+        console.error(`PixAI: Task ${task.status}`);
         return null;
       }
     }

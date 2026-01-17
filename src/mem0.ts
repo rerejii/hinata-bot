@@ -10,14 +10,6 @@ interface Memory {
   created_at: string;
 }
 
-interface AddMemoryResponse {
-  results: Array<{
-    id: string;
-    event: string;
-    memory: string;
-  }>;
-}
-
 export async function searchMemories(query: string, limit: number = 5): Promise<string> {
   try {
     const response = await fetch(`${MEM0_BASE_URL}/memories/search/`, {
@@ -72,25 +64,30 @@ export async function getRecentMemories(limit: number = 10): Promise<string> {
 }
 
 export async function saveMemory(content: string): Promise<void> {
-  const response = await fetch(`${MEM0_BASE_URL}/memories/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Token ${MEM0_API_KEY}`,
-    },
-    body: JSON.stringify({
-      messages: [{ role: 'user', content }],
-      user_id: USER_ID,
-    }),
-  });
+  try {
+    const response = await fetch(`${MEM0_BASE_URL}/memories/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Token ${MEM0_API_KEY}`,
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content }],
+        user_id: USER_ID,
+      }),
+    });
 
-  if (!response.ok) {
-    console.error(`Mem0 save error: ${response.status}`);
-    return;
+    if (!response.ok) {
+      console.error(`Mem0 save error: ${response.status}`);
+      return;
+    }
+
+    const data = await response.json();
+    const count = data?.results?.length ?? (Array.isArray(data) ? data.length : 0);
+    console.log('Memory saved:', count, 'entries');
+  } catch (error) {
+    console.error('Mem0 save error:', error);
   }
-
-  const data = (await response.json()) as AddMemoryResponse;
-  console.log('Memory saved:', data.results.length, 'entries');
 }
 
 let lastConversationTime: Date | null = null;
